@@ -90,7 +90,7 @@ public class AffiliateLinkCleaner {
         String[] tracking = {
             "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid",
             "twclid", "ttclid", "yclid", "li_fat_id", "mc_cid", "mc_eid",
-            "igshid", "_ga", "_gl", "spm", "scm", "ref", "ref_", "referrer",
+            "igshid", "_ga", "_gl", "spm", "scm", "sc_e", "ref", "ref_", "referrer",
         };
         for (String s : tracking) TRACKING_PARAMS.add(s);
 
@@ -110,6 +110,7 @@ public class AffiliateLinkCleaner {
             "bit.ly", "tinyurl.com", "rb.gy", "ow.ly", "buff.ly",
             "cutt.ly", "is.gd", "goo.gl",
             "rpx.a8.net", "ck.jp.ap.valuecommerce.com", "h.accesstrade.net",
+            "yahoo.jp",
         };
         for (String s : shorts) SHORT_HOSTS.add(s);
     }

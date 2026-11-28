@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-28T16:20:31",
-  "description": "Muse Patches 0.7.4 — X/Piko add-on patches. 'Strip affiliate links': now hooks the core UrlEntity constructor (the 12.19.1 GraphQL-to-core path the JSON parse hooks never see), so post links are cleaned at build time — affiliate/tracking parts removed, t.co unshortened, short links resolved, display URL cleaned too.",
-  "download_url": "https://github.com/tyuburarin/muse-patches/releases/download/0.7.4/muse-patches-0.7.4.mpp",
+  "created_at": "2026-11-28T16:28:07",
+  "description": "Muse Patches 0.7.5 — X/Piko add-on patches. 'Strip affiliate links': core UrlEntity constructor hook (12.19.1) — affiliate/tracking parts removed, t.co unshortened, short links resolved (now including yahoo.jp), display URL cleaned too.",
+  "download_url": "https://github.com/tyuburarin/muse-patches/releases/download/0.7.5/muse-patches-0.7.5.mpp",
   "signature_download_url": "",
-  "version": "0.7.4"
+  "version": "0.7.5"
 }
