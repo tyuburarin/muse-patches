@@ -106,7 +106,7 @@ public class AffiliateLinkCleaner {
         // affiliate payload) only exists behind a redirect.
         String[] shorts = {
             "amzn.to", "a.co", "amzn.asia", "link.amazon", "link.amazon.co.jp",
-            "a.r10.to", "hb.afl.rakuten.co.jp",
+            "a.r10.to", "hb.afl.rakuten.co.jp", "transition.afl.rakuten.co.jp",
             "bit.ly", "tinyurl.com", "rb.gy", "ow.ly", "buff.ly",
             "cutt.ly", "is.gd", "goo.gl",
             "rpx.a8.net", "ck.jp.ap.valuecommerce.com", "h.accesstrade.net",
