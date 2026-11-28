@@ -209,17 +209,18 @@ public class AffiliateLinkCleaner {
             setField(entity, urlField, cleaned);
             if (urlHttpsField != null) setField(entity, urlHttpsField, cleaned);
             if (displayField != null && !cleaned.equals(expanded)) {
-                // Display form (scheme stripped, like the API's own
-                // display_url) so the cleaned state is VISIBLE in the
+                // Display form so the cleaned state is VISIBLE in the
                 // timeline: a cleaned Amazon link shows as
                 // "www.amazon.co.jp/dp/<ASIN>" with no "?..." tail.
                 // ONLY when the URL actually changed: for untouched
-                // links the API's own display (readable, decoded,
-                // truncated) is better than the raw encoded URL —
-                // overwriting it made long Rakuten search links render
-                // as walls of %E3%82... in the timeline.
-                setField(entity, displayField,
-                        cleaned.replaceFirst("^https?://", ""));
+                // links the API's own display stays. When we do write
+                // it, mirror the API's own style — scheme stripped,
+                // percent-escapes DECODED (readable Japanese, not a
+                // %E3%82... wall) and truncated with an ellipsis —
+                // because the app renders display_url in full in the
+                // topic/detail views (user request, 2026-11-29:
+                // 「URL短縮にしといて」).
+                setField(entity, displayField, displayFor(cleaned));
             }
         } catch (Throwable ignored) {
             // Fail open: a cleaning bug must never break link parsing.
@@ -368,6 +369,55 @@ public class AffiliateLinkCleaner {
             sb.append(parts[i]);
         }
         return sb.toString();
+    }
+
+    private static final int DISPLAY_MAX = 40;
+
+    /**
+     * The display_url form of a cleaned URL, mirroring the API's own
+     * style: scheme stripped, percent-escapes decoded to readable
+     * text, and anything longer than DISPLAY_MAX code points cut
+     * with a trailing "…". Display only — the tap target keeps the
+     * full encoded URL.
+     */
+    private static String displayFor(String cleaned) {
+        String s = cleaned.replaceFirst("^https?://", "");
+        s = percentDecode(s);
+        int count = s.codePointCount(0, s.length());
+        if (count > DISPLAY_MAX) {
+            int end = s.offsetByCodePoints(0, DISPLAY_MAX);
+            s = s.substring(0, end) + "…";
+        }
+        return s;
+    }
+
+    /** Decodes %XX escapes as UTF-8; '+' is left as-is (path semantics). */
+    private static String percentDecode(String s) {
+        try {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            int i = 0;
+            while (i < s.length()) {
+                char c = s.charAt(i);
+                if (c == '%' && isHex(s, i + 1) && isHex(s, i + 2)) {
+                    out.write(Integer.parseInt(s.substring(i + 1, i + 3), 16));
+                    i += 3;
+                } else {
+                    byte[] b = String.valueOf(c).getBytes("UTF-8");
+                    out.write(b, 0, b.length);
+                    i++;
+                }
+            }
+            return new String(out.toByteArray(), "UTF-8");
+        } catch (Exception e) {
+            return s;
+        }
+    }
+
+    private static boolean isHex(String s, int idx) {
+        if (idx >= s.length()) return false;
+        char c = s.charAt(idx);
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+                || (c >= 'A' && c <= 'F');
     }
 
     private static String rebuild(URI uri, String keptQuery) {
