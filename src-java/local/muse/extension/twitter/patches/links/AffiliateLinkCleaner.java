@@ -181,11 +181,16 @@ public class AffiliateLinkCleaner {
             setField(entity, expandedField, cleaned);
             setField(entity, urlField, cleaned);
             if (urlHttpsField != null) setField(entity, urlHttpsField, cleaned);
-            if (displayField != null) {
+            if (displayField != null && !cleaned.equals(expanded)) {
                 // Display form (scheme stripped, like the API's own
                 // display_url) so the cleaned state is VISIBLE in the
                 // timeline: a cleaned Amazon link shows as
                 // "www.amazon.co.jp/dp/<ASIN>" with no "?..." tail.
+                // ONLY when the URL actually changed: for untouched
+                // links the API's own display (readable, decoded,
+                // truncated) is better than the raw encoded URL —
+                // overwriting it made long Rakuten search links render
+                // as walls of %E3%82... in the timeline.
                 setField(entity, displayField,
                         cleaned.replaceFirst("^https?://", ""));
             }
