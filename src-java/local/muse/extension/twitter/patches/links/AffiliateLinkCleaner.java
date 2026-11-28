@@ -180,10 +180,16 @@ public class AffiliateLinkCleaner {
             String b = getField(entity, "b");
             String candidate = (b != null && !b.isEmpty()) ? b : a;
             if (candidate == null || candidate.isEmpty()) return;
-            String cleaned = cleanUrl(resolveIfShort(candidate));
+            // Local clean only, like the text-link path; background
+            // resolution swaps a/b if the destination sits behind a
+            // short/redirector host.
+            String cleaned = cleanUrl(unwrapLocal(candidate));
             if (cleaned == null || cleaned.isEmpty()) return;
             setField(entity, "a", cleaned);
             setField(entity, "b", cleaned);
+            if (isShortHost(cleaned)) {
+                scheduleResolve(entity, "b", "a", null, null, candidate, cleaned);
+            }
         } catch (Throwable ignored) {
             // Fail open, same as the other entry points.
         }
@@ -197,18 +203,39 @@ public class AffiliateLinkCleaner {
             String expanded = getField(entity, expandedField);
             if (expanded == null || expanded.isEmpty()) return;
 
-            // Unshorten + clean in one pass: resolve known shorteners,
-            // strip affiliate/tracking parts, then write the final URL
-            // into every field the app can open. Writing it into the
-            // url fields is what removes the t.co hop for ALL links,
-            // not just affiliate ones (Piko's "No shortened URL" does
-            // the same with the raw expanded URL).
-            String cleaned = cleanUrl(resolveIfShort(expanded));
+            // LOCAL cleaning only, synchronously: strip affiliate /
+            // tracking parts and unwrap nested destinations — no
+            // network on the parse/construction path, so timelines
+            // and search no longer stall on short-link resolution
+            // (user report, 2026-11-29). Writing the cleaned URL
+            // into the url fields still removes the t.co hop for ALL
+            // links, not just affiliate ones (Piko's "No shortened
+            // URL" does the same with the raw expanded URL).
+            String cleaned = cleanUrl(unwrapLocal(expanded));
             if (cleaned == null || cleaned.isEmpty()) return;
+            writeCleaned(entity, expandedField, urlField, urlHttpsField,
+                    displayField, expanded, cleaned);
+            // If the destination is still behind a short/redirector
+            // host, resolve it in the BACKGROUND and swap the fields
+            // when it lands; nothing on the UI path waits for it.
+            if (isShortHost(cleaned)) {
+                scheduleResolve(entity, expandedField, urlField,
+                        urlHttpsField, displayField, expanded, cleaned);
+            }
+        } catch (Throwable ignored) {
+            // Fail open: a cleaning bug must never break link parsing.
+        }
+    }
+
+    private static void writeCleaned(
+            Object entity, String expandedField, String urlField,
+            String urlHttpsField, String displayField,
+            String originalExpanded, String cleaned) {
+        try {
             setField(entity, expandedField, cleaned);
             setField(entity, urlField, cleaned);
             if (urlHttpsField != null) setField(entity, urlHttpsField, cleaned);
-            if (displayField != null && !cleaned.equals(expanded)) {
+            if (displayField != null && !cleaned.equals(originalExpanded)) {
                 // Display form so the cleaned state is VISIBLE in the
                 // timeline: a cleaned Amazon link shows as
                 // "www.amazon.co.jp/dp/<ASIN>" with no "?..." tail.
@@ -483,6 +510,89 @@ public class AffiliateLinkCleaner {
     // ------------------------------------------------------------------
     // Short-link resolution
     // ------------------------------------------------------------------
+
+    private static boolean isShortHost(String url) {
+        try {
+            String host = new URI(url).getHost();
+            return host != null
+                    && SHORT_HOSTS.contains(host.toLowerCase(Locale.ROOT));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Network-free part of resolution: repeatedly unwrap destinations
+     * nested in query parameters (Yahoo's src / viewUrl chains) while
+     * the host is a known redirector. Anything that still needs an
+     * HTTP hop is left for the background resolver.
+     */
+    private static String unwrapLocal(String rawUrl) {
+        String current = rawUrl;
+        for (int i = 0; i < 4 && isShortHost(current); i++) {
+            String unwrapped = unwrapNested(current);
+            if (unwrapped == null) break;
+            current = unwrapped;
+        }
+        return current;
+    }
+
+    // ------------------------------------------------------------------
+    // Background resolution (never on the parse/UI path)
+    // ------------------------------------------------------------------
+
+    private static final java.util.Set<String> RESOLVE_IN_FLIGHT =
+            java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+    private static volatile java.util.concurrent.ExecutorService resolveExecutor;
+
+    private static java.util.concurrent.ExecutorService resolveExecutor() {
+        if (resolveExecutor == null) {
+            synchronized (AffiliateLinkCleaner.class) {
+                if (resolveExecutor == null) {
+                    resolveExecutor = java.util.concurrent.Executors
+                            .newSingleThreadExecutor(r -> {
+                                Thread t = new Thread(r, "affiliate-link-resolver");
+                                t.setDaemon(true);
+                                return t;
+                            });
+                }
+            }
+        }
+        return resolveExecutor;
+    }
+
+    /**
+     * Resolves a short/redirector URL off the UI path and swaps the
+     * entity's fields when it lands — but only if the entity still
+     * holds the locally cleaned value written synchronously (i.e.
+     * nothing else has repurposed it in the meantime).
+     */
+    private static void scheduleResolve(
+            Object entity, String expandedField, String urlField,
+            String urlHttpsField, String displayField,
+            String originalExpanded, String localCleaned) {
+        if (!RESOLVE_IN_FLIGHT.add(originalExpanded)) return;
+        try {
+            resolveExecutor().execute(() -> {
+                try {
+                    String resolved = cleanUrl(resolveIfShort(originalExpanded));
+                    if (resolved == null || resolved.isEmpty()
+                            || resolved.equals(localCleaned)) return;
+                    String current = getField(entity, expandedField);
+                    if (!localCleaned.equals(current)) return;
+                    writeCleaned(entity, expandedField, urlField,
+                            urlHttpsField, displayField,
+                            originalExpanded, resolved);
+                } catch (Throwable ignored) {
+                } finally {
+                    RESOLVE_IN_FLIGHT.remove(originalExpanded);
+                }
+            });
+        } catch (Throwable t) {
+            RESOLVE_IN_FLIGHT.remove(originalExpanded);
+        }
+    }
 
     static String resolveIfShort(String rawUrl) {
         String host;
