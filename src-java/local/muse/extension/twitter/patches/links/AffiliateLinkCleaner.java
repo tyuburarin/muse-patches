@@ -162,6 +162,33 @@ public class AffiliateLinkCleaner {
         applyClean(entity, "f", "e", null, "g");
     }
 
+    /**
+     * Entry point for LINK CARD destinations
+     * (com.twitter.model.json.unifiedcard.destinations.JsonUrlData,
+     * X 12.19.1 — fields verified from its mapper: a = url /
+     * vanity_url, b = full_url, c = tco_url). Unified cards carry
+     * their own URL data, separate from the post text entities, so
+     * the core-entity hook never sees them. The full destination is
+     * cleaned/resolved and written into both URL fields; the t.co
+     * field is left as-is (anything opening through it is redirected
+     * by X's server, outside the app's control).
+     */
+    public static void cleanCardUrlData(Object entity) {
+        try {
+            if (entity == null) return;
+            String a = getField(entity, "a");
+            String b = getField(entity, "b");
+            String candidate = (b != null && !b.isEmpty()) ? b : a;
+            if (candidate == null || candidate.isEmpty()) return;
+            String cleaned = cleanUrl(resolveIfShort(candidate));
+            if (cleaned == null || cleaned.isEmpty()) return;
+            setField(entity, "a", cleaned);
+            setField(entity, "b", cleaned);
+        } catch (Throwable ignored) {
+            // Fail open, same as the other entry points.
+        }
+    }
+
     private static void applyClean(
             Object entity, String expandedField, String urlField,
             String urlHttpsField, String displayField) {
@@ -275,11 +302,72 @@ public class AffiliateLinkCleaner {
             }
             // No ASIN: drop Amazon affiliate/click params + generic ones.
             String kept = filterQuery(rawQuery, true);
-            return rebuild(uri, kept);
+            return rebuild(uri, cleanNestedParams(kept));
         }
 
         String kept = filterQuery(rawQuery, false);
-        return rebuild(uri, kept);
+        return rebuild(uri, cleanNestedParams(kept));
+    }
+
+    private static final Set<String> NESTED_CLEAN_PARAMS = new HashSet<>();
+
+    static {
+        String[] nestedClean = {
+            "return_to", "returnto", "url", "u", "redirect", "redirect_url",
+            "target", "dest", "destination", "continue",
+        };
+        for (String s : nestedClean) NESTED_CLEAN_PARAMS.add(s);
+    }
+
+    private static boolean isNestedCleanParam(String name) {
+        if (NESTED_CLEAN_PARAMS.contains(name)) return true;
+        // Prefixed forms like Amazon's "openid.return_to".
+        for (String n : NESTED_CLEAN_PARAMS) {
+            if (name.endsWith("." + n)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Cleans URLs nested inside a query parameter. Amazon Associates
+     * sign-in links hide the affiliate payload one level down:
+     * /ap/signin?openid.return_to=<encoded URL with tag=...&linkId=...>
+     * — the top-level filter cannot see it. When a known parameter's
+     * decoded value is itself an http(s) URL, that inner URL is
+     * cleaned recursively and re-encoded in place; if the inner URL
+     * is unchanged, the parameter is left byte-identical.
+     */
+    private static String cleanNestedParams(String query) {
+        if (query == null || query.isEmpty()) return query;
+        String[] parts = query.split("&");
+        boolean changed = false;
+        for (int i = 0; i < parts.length; i++) {
+            int eq = parts[i].indexOf('=');
+            if (eq < 0) continue;
+            String name = decode(parts[i].substring(0, eq))
+                    .toLowerCase(Locale.ROOT);
+            if (!isNestedCleanParam(name)) continue;
+            String inner = decode(parts[i].substring(eq + 1));
+            if (!inner.startsWith("http://") && !inner.startsWith("https://")) {
+                continue;
+            }
+            String cleanedInner = cleanUrl(inner);
+            if (cleanedInner != null && !cleanedInner.equals(inner)) {
+                try {
+                    parts[i] = parts[i].substring(0, eq + 1)
+                            + java.net.URLEncoder.encode(cleanedInner, "UTF-8");
+                    changed = true;
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        if (!changed) return query;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) sb.append('&');
+            sb.append(parts[i]);
+        }
+        return sb.toString();
     }
 
     private static String rebuild(URI uri, String keptQuery) {

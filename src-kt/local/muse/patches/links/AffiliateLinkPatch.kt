@@ -49,6 +49,23 @@ internal object JsonTimelineUrlParseFingerprint : Fingerprint(
     parameters = listOf("Lcom/fasterxml/jackson/core/h;"),
 )
 
+private const val CARD_URL_DATA_MAPPER_CLASS =
+    "Lcom/twitter/model/json/unifiedcard/destinations/JsonUrlData\$\$JsonObjectMapper;"
+
+/**
+ * The typed parse of the unified-card URL data. Link cards carry
+ * their own destination (a = url/vanity_url, b = full_url,
+ * c = tco_url — verified against X 12.19.1), separate from the post
+ * text entities. Same parse shape as the other mappers: entity in
+ * v0, one earlier null return, final `return-object v0`.
+ */
+internal object JsonUrlDataParseFingerprint : Fingerprint(
+    definingClass = CARD_URL_DATA_MAPPER_CLASS,
+    name = "parse",
+    returnType = "Lcom/twitter/model/json/unifiedcard/destinations/JsonUrlData;",
+    parameters = listOf("Lcom/fasterxml/jackson/core/h;"),
+)
+
 private const val CORE_URL_ENTITY_CLASS =
     "Lcom/twitter/model/core/entity/p1;"
 
@@ -203,6 +220,11 @@ val stripAffiliateLinksPatch =
                 JsonTimelineUrlParseFingerprint,
                 TIMELINE_URL_MAPPER_CLASS,
                 "cleanTimelineUrl",
+            )
+            insertCleanCall(
+                JsonUrlDataParseFingerprint,
+                CARD_URL_DATA_MAPPER_CLASS,
+                "cleanCardUrlData",
             )
             insertCoreEntityCleanCall()
         }
