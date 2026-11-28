@@ -13,6 +13,8 @@ import com.android.tools.smali.dexlib2.iface.instruction.formats.Instruction11x
 
 private const val URL_ENTITY_MAPPER_CLASS =
     "Lcom/twitter/model/json/core/JsonUrlEntity\$\$JsonObjectMapper;"
+private const val TIMELINE_URL_MAPPER_CLASS =
+    "Lcom/twitter/model/json/timeline/urt/JsonTimelineUrl\$\$JsonObjectMapper;"
 private const val CLEANER_CLASS =
     "Llocal/muse/extension/twitter/patches/links/AffiliateLinkCleaner;"
 
@@ -30,6 +32,20 @@ internal object JsonUrlEntityParseFingerprint : Fingerprint(
     definingClass = URL_ENTITY_MAPPER_CLASS,
     name = "parse",
     returnType = "Lcom/twitter/model/json/core/JsonUrlEntity;",
+    parameters = listOf("Lcom/fasterxml/jackson/core/h;"),
+)
+
+/**
+ * The typed parse method of the URT timeline URL mapper. URT link
+ * entries carry their own URL model (a = expanded_url, b = url),
+ * separate from post text entities. Verified against X 12.19.1: the
+ * entity is built in v0 and the final instruction is
+ * `return-object v0`; the one earlier return is the null case.
+ */
+internal object JsonTimelineUrlParseFingerprint : Fingerprint(
+    definingClass = TIMELINE_URL_MAPPER_CLASS,
+    name = "parse",
+    returnType = "Lcom/twitter/model/json/timeline/urt/JsonTimelineUrl;",
     parameters = listOf("Lcom/fasterxml/jackson/core/h;"),
 )
 
@@ -64,6 +80,44 @@ internal object JsonUrlEntityParseFingerprint : Fingerprint(
  * the fingerprint shape ever differs from 12.19.1 the patch aborts
  * instead of inserting into the wrong place.
  */
+/**
+ * Inserts `AffiliateLinkCleaner.<cleanerMethod>(entity)` just before
+ * the final RETURN_OBJECT of the fingerprint's parse method, after
+ * checking the match is exactly the class/method it claims to be.
+ */
+private fun insertCleanCall(
+    fingerprint: Fingerprint,
+    expectedClass: String,
+    cleanerMethod: String,
+) {
+    if (fingerprint.classDef.type != expectedClass) {
+        throw PatchException(
+            "Mapper fingerprint matched an unexpected class: ${fingerprint.classDef.type}",
+        )
+    }
+    val method = fingerprint.method
+    if (method.name != "parse") {
+        throw PatchException(
+            "Mapper fingerprint matched an unexpected method: ${method.name}",
+        )
+    }
+
+    val code = method.instructions.toList()
+    val returnIndex = code.indexOfLast { it.opcode == Opcode.RETURN_OBJECT }
+    if (returnIndex < 0) {
+        throw PatchException("No RETURN_OBJECT found in parse of $expectedClass")
+    }
+    val returnRegister =
+        (method.getInstruction<Instruction11x>(returnIndex)).registerA
+
+    method.addInstructions(
+        returnIndex,
+        """
+        invoke-static { v$returnRegister }, $CLEANER_CLASS->$cleanerMethod(Ljava/lang/Object;)V
+        """.trimIndent(),
+    )
+}
+
 @Suppress("unused")
 val stripAffiliateLinksPatch =
     bytecodePatch(
@@ -76,32 +130,15 @@ val stripAffiliateLinksPatch =
         extendWithBundled("extensions/muse-patches.dex")
 
         execute {
-            val fingerprint = JsonUrlEntityParseFingerprint
-            if (fingerprint.classDef.type != URL_ENTITY_MAPPER_CLASS) {
-                throw PatchException(
-                    "JsonUrlEntity mapper fingerprint matched an unexpected class: ${fingerprint.classDef.type}",
-                )
-            }
-            val method = fingerprint.method
-            if (method.name != "parse") {
-                throw PatchException(
-                    "JsonUrlEntity mapper fingerprint matched an unexpected method: ${method.name}",
-                )
-            }
-
-            val code = method.instructions.toList()
-            val returnIndex = code.indexOfLast { it.opcode == Opcode.RETURN_OBJECT }
-            if (returnIndex < 0) {
-                throw PatchException("No RETURN_OBJECT found in JsonUrlEntity parse")
-            }
-            val returnRegister =
-                (method.getInstruction<Instruction11x>(returnIndex)).registerA
-
-            method.addInstructions(
-                returnIndex,
-                """
-                invoke-static { v$returnRegister }, $CLEANER_CLASS->clean(Ljava/lang/Object;)V
-                """.trimIndent(),
+            insertCleanCall(
+                JsonUrlEntityParseFingerprint,
+                URL_ENTITY_MAPPER_CLASS,
+                "clean",
+            )
+            insertCleanCall(
+                JsonTimelineUrlParseFingerprint,
+                TIMELINE_URL_MAPPER_CLASS,
+                "cleanTimelineUrl",
             )
         }
     }

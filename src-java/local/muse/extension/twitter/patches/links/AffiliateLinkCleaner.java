@@ -104,7 +104,7 @@ public class AffiliateLinkCleaner {
         // Shorteners / affiliate redirectors: the destination (and its
         // affiliate payload) only exists behind a redirect.
         String[] shorts = {
-            "amzn.to", "a.co", "amzn.asia",
+            "amzn.to", "a.co", "amzn.asia", "link.amazon", "link.amazon.co.jp",
             "a.r10.to", "hb.afl.rakuten.co.jp",
             "bit.ly", "tinyurl.com", "rb.gy", "ow.ly", "buff.ly",
             "cutt.ly", "is.gd", "goo.gl",
@@ -125,10 +125,27 @@ public class AffiliateLinkCleaner {
     // ------------------------------------------------------------------
 
     public static void clean(Object entity) {
+        applyClean(entity, FIELD_EXPANDED, FIELD_URL, FIELD_URL_HTTPS);
+    }
+
+    /**
+     * Entry point for the URT timeline URL model
+     * (Lcom/twitter/model/json/timeline/urt/JsonTimelineUrl;), hooked
+     * from its mapper's parse the same way. Verified against X 12.19.1:
+     * a = expanded_url, b = url (t.co). The cleaned expanded URL is
+     * written into both, so a tap on a URT link entry opens the clean
+     * destination directly.
+     */
+    public static void cleanTimelineUrl(Object entity) {
+        applyClean(entity, "a", "b", null);
+    }
+
+    private static void applyClean(
+            Object entity, String expandedField, String urlField, String urlHttpsField) {
         try {
             if (entity == null) return;
-            String expanded = getField(entity, FIELD_EXPANDED);
-            String url = getField(entity, FIELD_URL);
+            String expanded = getField(entity, expandedField);
+            String url = getField(entity, urlField);
             String target = expanded != null && !expanded.isEmpty() ? expanded : url;
             if (target == null || target.isEmpty()) return;
 
@@ -138,15 +155,15 @@ public class AffiliateLinkCleaner {
                 // Nothing to strip; still, if a short link resolved to a
                 // clean-but-different destination, open that directly.
                 if (!resolved.equals(target)) {
-                    setField(entity, FIELD_EXPANDED, resolved);
-                    setField(entity, FIELD_URL, resolved);
-                    setField(entity, FIELD_URL_HTTPS, resolved);
+                    setField(entity, expandedField, resolved);
+                    setField(entity, urlField, resolved);
+                    if (urlHttpsField != null) setField(entity, urlHttpsField, resolved);
                 }
                 return;
             }
-            setField(entity, FIELD_EXPANDED, cleaned);
-            setField(entity, FIELD_URL, cleaned);
-            setField(entity, FIELD_URL_HTTPS, cleaned);
+            setField(entity, expandedField, cleaned);
+            setField(entity, urlField, cleaned);
+            if (urlHttpsField != null) setField(entity, urlHttpsField, cleaned);
         } catch (Throwable ignored) {
             // Fail open: a cleaning bug must never break link parsing.
         }
