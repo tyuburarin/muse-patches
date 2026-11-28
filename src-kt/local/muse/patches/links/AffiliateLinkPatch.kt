@@ -122,7 +122,7 @@ private fun insertCleanCall(
 val stripAffiliateLinksPatch =
     bytecodePatch(
         name = "Strip affiliate links",
-        description = "投稿内のリンクを開く前にアフィリエイト・トラッキング部分を外します。Amazon は /dp/<ASIN> に正規化、短縮リンク (amzn.to / a.r10.to 等) はリダイレクトを解決してからクリーニングします。",
+        description = "投稿内のリンクを開く前にアフィリエイト・トラッキング部分を外し、t.co 短縮も解除して展開先を直接開きます。Amazon は /dp/<ASIN> に正規化、短縮リンク (amzn.to / link.amazon / a.r10.to 等) はリダイレクトを解決してからクリーニングします。",
         default = true,
     ) {
         compatibleWith(COMPATIBILITY_X)

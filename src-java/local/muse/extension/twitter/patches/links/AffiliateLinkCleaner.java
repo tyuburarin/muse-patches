@@ -145,22 +145,16 @@ public class AffiliateLinkCleaner {
         try {
             if (entity == null) return;
             String expanded = getField(entity, expandedField);
-            String url = getField(entity, urlField);
-            String target = expanded != null && !expanded.isEmpty() ? expanded : url;
-            if (target == null || target.isEmpty()) return;
+            if (expanded == null || expanded.isEmpty()) return;
 
-            String resolved = resolveIfShort(target);
-            String cleaned = cleanUrl(resolved);
-            if (cleaned == null || cleaned.equals(target)) {
-                // Nothing to strip; still, if a short link resolved to a
-                // clean-but-different destination, open that directly.
-                if (!resolved.equals(target)) {
-                    setField(entity, expandedField, resolved);
-                    setField(entity, urlField, resolved);
-                    if (urlHttpsField != null) setField(entity, urlHttpsField, resolved);
-                }
-                return;
-            }
+            // Unshorten + clean in one pass: resolve known shorteners,
+            // strip affiliate/tracking parts, then write the final URL
+            // into every field the app can open. Writing it into the
+            // url fields is what removes the t.co hop for ALL links,
+            // not just affiliate ones (Piko's "No shortened URL" does
+            // the same with the raw expanded URL).
+            String cleaned = cleanUrl(resolveIfShort(expanded));
+            if (cleaned == null || cleaned.isEmpty()) return;
             setField(entity, expandedField, cleaned);
             setField(entity, urlField, cleaned);
             if (urlHttpsField != null) setField(entity, urlHttpsField, cleaned);
