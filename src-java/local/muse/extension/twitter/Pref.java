@@ -9,6 +9,10 @@ public class Pref {
         return true;
     }
 
+    public static boolean cleanAffiliateLinkButton() {
+        return true;
+    }
+
     public static boolean postHeaderButtons() {
         return true;
     }

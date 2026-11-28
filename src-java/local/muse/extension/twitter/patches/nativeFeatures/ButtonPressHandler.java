@@ -22,10 +22,11 @@ public class ButtonPressHandler {
 
     private static final String TAG_COPY = "CopyPostText";
     private static final String TAG_SAVE = "SaveToMuse";
+    private static final String TAG_CLEAN = "CleanAffiliateLink";
 
     public static boolean isButtonPressed(Object buttonPressed) {
         String tag = String.valueOf(buttonPressed);
-        return TAG_COPY.equals(tag) || TAG_SAVE.equals(tag);
+        return TAG_COPY.equals(tag) || TAG_SAVE.equals(tag) || TAG_CLEAN.equals(tag);
     }
 
     public static void buttonPressAction(Context context, Object buttonPressed, Object tweetObject) {
@@ -41,6 +42,11 @@ public class ButtonPressHandler {
                 copyPostText(context, tweet, source);
             } else if (TAG_SAVE.equals(tag)) {
                 forwardToSpace(context, tweet);
+            } else if (TAG_CLEAN.equals(tag)) {
+                // Works on the raw tweet item: the URL entities are
+                // collected reflectively from its object graph.
+                local.muse.extension.twitter.patches.links.AffiliateMenuHandler
+                        .onCleanLinkPressed(context, tweetObject);
             }
         } catch (Exception e) {
             Log.e("MusePatches", "share menu action failed", e);

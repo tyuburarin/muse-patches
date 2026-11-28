@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-28T17:31:57",
-  "description": "Muse Patches 0.7.11 — X/Piko add-on patches. 'Strip affiliate links' no longer resolves short links on the loading path: cleaning is local and instant, and short/redirector destinations are resolved on a background thread and swapped in when ready, so timelines and search no longer stall.",
-  "download_url": "https://github.com/tyuburarin/muse-patches/releases/download/0.7.11/muse-patches-0.7.11.mpp",
+  "created_at": "2026-11-28T17:49:30",
+  "description": "Muse Patches 0.7.12 — X/Piko add-on patches. New 'Clean affiliate link button' patch: adds a 'アフィ外して開く' entry to the post ⋯ menu. Tapping it fully resolves that post's links (short/redirector hops included), strips the affiliate parts and opens the first one — the explicit full-strength counterpart to the automatic local-only cleaning.",
+  "download_url": "https://github.com/tyuburarin/muse-patches/releases/download/0.7.12/muse-patches-0.7.12.mpp",
   "signature_download_url": "",
-  "version": "0.7.11"
+  "version": "0.7.12"
 }

@@ -32,6 +32,29 @@ val copyPostTextSharePatch =
     }
 
 @Suppress("unused")
+val cleanAffiliateLinkSharePatch =
+    bytecodePatch(
+        name = "Clean affiliate link button",
+        description = "Adds a 'アフィ外して開く' entry to the post share menu that fully resolves the post's links (short/redirector hops included), strips the affiliate parts and opens the first one. The explicit, full-strength counterpart to the automatic local-only cleaning.",
+        default = true,
+    ) {
+        compatibleWith(COMPATIBILITY_X)
+
+        extendWithBundled("extensions/muse-patches.dex")
+
+        dependsOn(shareMenuButtonOnClickHook, entityGenerator)
+
+        execute {
+            shareMenuButtonInjection(
+                actionName = "CleanAffiliateLink",
+                prefFunctionName = "cleanAffiliateLinkButton",
+                stringId = "アフィ外して開く",
+                iconId = "ic_vector_link",
+            )
+        }
+    }
+
+@Suppress("unused")
 val saveToMuseSharePatch =
     bytecodePatch(
         name = "Save to Muse",

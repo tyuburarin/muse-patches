@@ -227,7 +227,7 @@ public class AffiliateLinkCleaner {
         }
     }
 
-    private static void writeCleaned(
+    static void writeCleaned(
             Object entity, String expandedField, String urlField,
             String urlHttpsField, String displayField,
             String originalExpanded, String cleaned) {
@@ -407,7 +407,7 @@ public class AffiliateLinkCleaner {
      * with a trailing "…". Display only — the tap target keeps the
      * full encoded URL.
      */
-    private static String displayFor(String cleaned) {
+    static String displayFor(String cleaned) {
         String s = cleaned.replaceFirst("^https?://", "");
         s = percentDecode(s);
         int count = s.codePointCount(0, s.length());
