@@ -61,6 +61,7 @@ public class AffiliateLinkCleaner {
     // ---- JsonUrlEntity field names (X 12.19.1, verified from the dex) ----
     private static final String FIELD_URL_HTTPS = "b";
     private static final String FIELD_EXPANDED = "c";
+    private static final String FIELD_DISPLAY = "d";
     private static final String FIELD_URL = "e";
 
     private static final Pattern AMAZON_HOST =
@@ -125,7 +126,7 @@ public class AffiliateLinkCleaner {
     // ------------------------------------------------------------------
 
     public static void clean(Object entity) {
-        applyClean(entity, FIELD_EXPANDED, FIELD_URL, FIELD_URL_HTTPS);
+        applyClean(entity, FIELD_EXPANDED, FIELD_URL, FIELD_URL_HTTPS, FIELD_DISPLAY);
     }
 
     /**
@@ -137,11 +138,12 @@ public class AffiliateLinkCleaner {
      * destination directly.
      */
     public static void cleanTimelineUrl(Object entity) {
-        applyClean(entity, "a", "b", null);
+        applyClean(entity, "a", "b", null, null);
     }
 
     private static void applyClean(
-            Object entity, String expandedField, String urlField, String urlHttpsField) {
+            Object entity, String expandedField, String urlField,
+            String urlHttpsField, String displayField) {
         try {
             if (entity == null) return;
             String expanded = getField(entity, expandedField);
@@ -158,6 +160,14 @@ public class AffiliateLinkCleaner {
             setField(entity, expandedField, cleaned);
             setField(entity, urlField, cleaned);
             if (urlHttpsField != null) setField(entity, urlHttpsField, cleaned);
+            if (displayField != null) {
+                // Display form (scheme stripped, like the API's own
+                // display_url) so the cleaned state is VISIBLE in the
+                // timeline: a cleaned Amazon link shows as
+                // "www.amazon.co.jp/dp/<ASIN>" with no "?..." tail.
+                setField(entity, displayField,
+                        cleaned.replaceFirst("^https?://", ""));
+            }
         } catch (Throwable ignored) {
             // Fail open: a cleaning bug must never break link parsing.
         }

@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-28T15:53:44",
-  "description": "Muse Patches 0.7.2 — X/Piko add-on patches. 'Strip affiliate links': removes affiliate/tracking parts from post links and unshortens t.co so links open their destination directly; short links (amzn.to / link.amazon / a.r10.to) are resolved first; URT timeline URLs are hooked as well.",
-  "download_url": "https://github.com/tyuburarin/muse-patches/releases/download/0.7.2/muse-patches-0.7.2.mpp",
+  "created_at": "2026-11-28T16:04:40",
+  "description": "Muse Patches 0.7.3 — X/Piko add-on patches. 'Strip affiliate links': removes affiliate/tracking parts from post links, unshortens t.co, resolves short links (amzn.to / link.amazon / a.r10.to) first, hooks URT timeline URLs, and cleans the display URL too so the cleaned state is visible in the timeline.",
+  "download_url": "https://github.com/tyuburarin/muse-patches/releases/download/0.7.3/muse-patches-0.7.3.mpp",
   "signature_download_url": "",
-  "version": "0.7.2"
+  "version": "0.7.3"
 }
