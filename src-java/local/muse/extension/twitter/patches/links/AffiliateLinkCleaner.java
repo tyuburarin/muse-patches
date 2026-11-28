@@ -1,5 +1,7 @@
 package local.muse.extension.twitter.patches.links;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
@@ -84,6 +86,7 @@ public class AffiliateLinkCleaner {
         String[] affiliate = {
             "aff", "affiliate", "affiliate_id", "affiliateid", "aff_id",
             "affid", "affuid", "a8", "vc_url", "linkcode", "linkid",
+            "affiliatelinkid",
         };
         for (String s : affiliate) AFFILIATE_PARAMS.add(s);
 
@@ -110,7 +113,7 @@ public class AffiliateLinkCleaner {
             "bit.ly", "tinyurl.com", "rb.gy", "ow.ly", "buff.ly",
             "cutt.ly", "is.gd", "goo.gl",
             "rpx.a8.net", "ck.jp.ap.valuecommerce.com", "h.accesstrade.net",
-            "yahoo.jp",
+            "yahoo.jp", "app.yahoo.co.jp", "affiliate.shopping.yahoo.co.jp",
         };
         for (String s : shorts) SHORT_HOSTS.add(s);
     }
@@ -319,7 +322,8 @@ public class AffiliateLinkCleaner {
         if (n.startsWith("utm_")) return true;
         if (AFFILIATE_PARAMS.contains(n)) return true;
         if (TRACKING_PARAMS.contains(n)) return true;
-        if (n.equals("scid") && SCID_AFFILIATE.matcher(value).find()) return true;
+        if ((n.equals("scid") || n.equals("sc2id"))
+                && SCID_AFFILIATE.matcher(value).find()) return true;
         return false;
     }
 
@@ -358,9 +362,28 @@ public class AffiliateLinkCleaner {
         return resolved;
     }
 
+    private static final Pattern RAKUTEN_ITEM_URL =
+            Pattern.compile("https://item\\.rakuten\\.co\\.jp/[^\"'<>&\\s]+");
+
+    private static final Set<String> NESTED_URL_PARAMS = new HashSet<>();
+
+    static {
+        String[] nested = {"src", "viewurl", "url", "u", "redirect", "redirect_url", "target"};
+        for (String s : nested) NESTED_URL_PARAMS.add(s);
+    }
+
     private static String followRedirects(String start) {
         String current = start;
-        for (int hop = 0; hop < 6; hop++) {
+        for (int hop = 0; hop < 8; hop++) {
+            // Redirectors that wrap the destination in a query param
+            // (Yahoo: app.yahoo.co.jp's src, affiliate.shopping's
+            // viewUrl) are unwrapped without any network hop — the
+            // affiliate entry URL itself is never fetched.
+            String unwrapped = unwrapNested(current);
+            if (unwrapped != null) {
+                current = unwrapped;
+                continue;
+            }
             HttpURLConnection conn = null;
             try {
                 conn = (HttpURLConnection) new URL(current).openConnection();
@@ -374,8 +397,23 @@ public class AffiliateLinkCleaner {
                         || code == 307 || code == 308) {
                     String location = conn.getHeaderField("Location");
                     if (location == null || location.isEmpty()) return current;
+                    if (location.startsWith("intent://")) {
+                        // Yahoo's app deep link: the web destination
+                        // rides in the browser fallback parameter.
+                        String fallback = extractIntentFallback(location);
+                        if (fallback == null) return current;
+                        current = fallback;
+                        continue;
+                    }
                     current = new URL(new URL(current), location).toString();
                     continue;
+                }
+                if (code == 200 && isRakutenTransition(current)) {
+                    // Rakuten's affiliate transition host answers 200
+                    // with a landing page; the item URL is printed in
+                    // the body (verified live 2026-11-29).
+                    String item = extractRakutenItemUrl(readBodyLimited(conn));
+                    if (item != null) return item;
                 }
                 return current;
             } catch (Exception e) {
@@ -385,5 +423,97 @@ public class AffiliateLinkCleaner {
             }
         }
         return current;
+    }
+
+    /**
+     * If the URL carries a nested destination in a known parameter
+     * (src / viewUrl / url / ...), returns that destination,
+     * URL-decoded as many times as needed (Yahoo double-encodes it).
+     * Otherwise null.
+     */
+    private static String unwrapNested(String url) {
+        String query;
+        try {
+            URI uri = new URI(url);
+            // Only known redirector/entry hosts get unwrapped — a
+            // product param named "url" on a real shop page must
+            // never be mistaken for a wrapped destination.
+            String host = uri.getHost();
+            if (host == null
+                    || !SHORT_HOSTS.contains(host.toLowerCase(Locale.ROOT))) {
+                return null;
+            }
+            query = uri.getRawQuery();
+        } catch (Exception e) {
+            return null;
+        }
+        if (query == null) return null;
+        for (String part : query.split("&")) {
+            int eq = part.indexOf('=');
+            if (eq < 0) continue;
+            String name = decode(part.substring(0, eq)).toLowerCase(Locale.ROOT);
+            if (!NESTED_URL_PARAMS.contains(name)) continue;
+            String value = part.substring(eq + 1);
+            for (int i = 0; i < 3; i++) {
+                String decoded = decode(value);
+                if (decoded.equals(value)) break;
+                value = decoded;
+            }
+            if (value.startsWith("http://") || value.startsWith("https://")) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private static String extractIntentFallback(String intentUrl) {
+        String marker = "S.browser_fallback_url=";
+        int i = intentUrl.indexOf(marker);
+        if (i < 0) return null;
+        String rest = intentUrl.substring(i + marker.length());
+        int end = rest.indexOf(';');
+        if (end >= 0) rest = rest.substring(0, end);
+        String decoded = decode(rest);
+        return (decoded.startsWith("http://") || decoded.startsWith("https://"))
+                ? decoded : null;
+    }
+
+    private static boolean isRakutenTransition(String url) {
+        try {
+            String host = new URI(url).getHost();
+            return host != null
+                    && host.equalsIgnoreCase("transition.afl.rakuten.co.jp");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static String extractRakutenItemUrl(String body) {
+        if (body == null) return null;
+        Matcher m = RAKUTEN_ITEM_URL.matcher(body);
+        return m.find() ? m.group() : null;
+    }
+
+    private static String readBodyLimited(HttpURLConnection conn) {
+        InputStream in = null;
+        try {
+            in = conn.getInputStream();
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int total = 0;
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                out.write(buf, 0, n);
+                total += n;
+                if (total > 65536) break;
+            }
+            return out.toString("UTF-8");
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (in != null) {
+                try { in.close(); } catch (Exception ignored) { }
+            }
+        }
     }
 }

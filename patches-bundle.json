@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-28T16:31:18",
-  "description": "Muse Patches 0.7.6 — X/Piko add-on patches. 'Strip affiliate links': core UrlEntity constructor hook (12.19.1) — affiliate/tracking parts removed, t.co unshortened, short links resolved (yahoo.jp and Rakuten transition.afl now included), display URL cleaned too.",
-  "download_url": "https://github.com/tyuburarin/muse-patches/releases/download/0.7.6/muse-patches-0.7.6.mpp",
+  "created_at": "2026-11-28T16:41:40",
+  "description": "Muse Patches 0.7.7 — X/Piko add-on patches. 'Strip affiliate links': core UrlEntity hook (12.19.1) with a resolver that now follows nested/wrapped destinations (Yahoo src/viewUrl unwrap, intent fallback), Rakuten transition landing pages, plus yahoo.jp and Rakuten affiliate hosts.",
+  "download_url": "https://github.com/tyuburarin/muse-patches/releases/download/0.7.7/muse-patches-0.7.7.mpp",
   "signature_download_url": "",
-  "version": "0.7.6"
+  "version": "0.7.7"
 }
