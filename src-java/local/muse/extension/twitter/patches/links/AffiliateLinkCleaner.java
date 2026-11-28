@@ -141,6 +141,23 @@ public class AffiliateLinkCleaner {
         applyClean(entity, "a", "b", null, null);
     }
 
+    /**
+     * Entry point for the CORE UrlEntity hook
+     * (com.twitter.model.core.entity.p1, X 12.19.1). Field mapping
+     * verified from the focal text converter in the dex, which builds
+     * com.x.models.text.UrlEntity(display=p1.g, expanded=p1.f,
+     * url=p1.e): e = url (t.co), f = expanded_url, g = display_url.
+     * Called at the end of p1's builder constructor, so every entity
+     * the app builds — timeline, profile, search, detail — is cleaned
+     * before anything renders or opens it. The JSON parse hooks above
+     * never fire for post text links in 12.19.1 (the entities come
+     * from the GraphQL-to-core conversion, not LoganSquare parsing),
+     * which is why this constructor hook exists.
+     */
+    public static void cleanCoreUrlEntity(Object entity) {
+        applyClean(entity, "f", "e", null, "g");
+    }
+
     private static void applyClean(
             Object entity, String expandedField, String urlField,
             String urlHttpsField, String displayField) {

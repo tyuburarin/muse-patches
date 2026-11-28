@@ -49,6 +49,28 @@ internal object JsonTimelineUrlParseFingerprint : Fingerprint(
     parameters = listOf("Lcom/fasterxml/jackson/core/h;"),
 )
 
+private const val CORE_URL_ENTITY_CLASS =
+    "Lcom/twitter/model/core/entity/p1;"
+
+/**
+ * The builder constructor of the CORE UrlEntity
+ * (com.twitter.model.core.entity.p1, X 12.19.1). Post text entities
+ * in 12.19.1 are NOT built by the LoganSquare mappers above — they
+ * come from the GraphQL-to-core conversion — so the parse hooks
+ * never fire for them (confirmed on device: display and destination
+ * unchanged). Every core UrlEntity, however, is materialised through
+ * this one constructor (e = url, f = expanded_url, g = display_url,
+ * verified from the focal text converter and the constructor body:
+ * 4 registers, `this` in v2, single return-void at the end), so
+ * cleaning here covers timeline, profile, search and detail at once.
+ */
+internal object CoreUrlEntityConstructorFingerprint : Fingerprint(
+    definingClass = CORE_URL_ENTITY_CLASS,
+    name = "<init>",
+    returnType = "V",
+    parameters = listOf("Lcom/twitter/model/core/entity/p1\$a;"),
+)
+
 /**
  * "Strip affiliate links" — アフィリンクを外して踏む.
  *
@@ -118,6 +140,48 @@ private fun insertCleanCall(
     )
 }
 
+/**
+ * Inserts `AffiliateLinkCleaner.cleanCoreUrlEntity(this)` just before
+ * the final RETURN_VOID of the core UrlEntity's builder constructor.
+ * `this` is the register (registerCount - parameters - 1); the shape
+ * is checked before inserting so a layout change aborts the patch
+ * instead of corrupting the constructor.
+ */
+private fun insertCoreEntityCleanCall() {
+    if (CoreUrlEntityConstructorFingerprint.classDef.type != CORE_URL_ENTITY_CLASS) {
+        throw PatchException(
+            "Core entity fingerprint matched an unexpected class: " +
+                CoreUrlEntityConstructorFingerprint.classDef.type,
+        )
+    }
+    val method = CoreUrlEntityConstructorFingerprint.method
+    if (method.name != "<init>") {
+        throw PatchException(
+            "Core entity fingerprint matched an unexpected method: ${method.name}",
+        )
+    }
+    val implementation = method.implementation
+        ?: throw PatchException("Core UrlEntity constructor has no code")
+    val thisRegister =
+        implementation.registerCount - method.parameterTypes.size - 1
+    if (thisRegister < 0) {
+        throw PatchException("Core UrlEntity constructor register layout unexpected")
+    }
+
+    val code = method.instructions.toList()
+    val returnIndex = code.indexOfLast { it.opcode == Opcode.RETURN_VOID }
+    if (returnIndex < 0) {
+        throw PatchException("No RETURN_VOID found in core UrlEntity constructor")
+    }
+
+    method.addInstructions(
+        returnIndex,
+        """
+        invoke-static { v$thisRegister }, $CLEANER_CLASS->cleanCoreUrlEntity(Ljava/lang/Object;)V
+        """.trimIndent(),
+    )
+}
+
 @Suppress("unused")
 val stripAffiliateLinksPatch =
     bytecodePatch(
@@ -140,5 +204,6 @@ val stripAffiliateLinksPatch =
                 TIMELINE_URL_MAPPER_CLASS,
                 "cleanTimelineUrl",
             )
+            insertCoreEntityCleanCall()
         }
     }
